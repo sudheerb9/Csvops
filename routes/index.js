@@ -3,16 +3,18 @@ var router = express.Router();
 var fs = require('fs')
 var csv = require('csv-parser')
 var csvWriter = require('csv-write-stream');
+const stripBomStream = require('strip-bom-stream');
+require('body-parser');
 
 const authors = [];
 const magazines = [];
 const books = [];
 
-fs.createReadStream('authors.csv')
-  .pipe(csv())
+fs.createReadStream('public/authors.csv').pipe(stripBomStream())
+  .pipe(csv({ separator: ';' }))
   .on('data', function (row) {    
     const author = {
-        emaail: row.email,
+        email: row.email,
         firstname: row.firstname,
         lastname: row.lastname,
     }
@@ -22,8 +24,8 @@ fs.createReadStream('authors.csv')
       console.table(authors)
 })
 
-fs.createReadStream('books.csv')
-  .pipe(csv())
+fs.createReadStream('public/books.csv').pipe(stripBomStream())
+  .pipe(csv({ separator: ';' }))
   .on('data', function (row) {    
     const book = {
         title: row.title,
@@ -37,8 +39,8 @@ fs.createReadStream('books.csv')
       console.table(books)
 })
 
-fs.createReadStream('magazines.csv')
-  .pipe(csv())
+fs.createReadStream('public/magazines.csv').pipe(stripBomStream())
+  .pipe(csv({ separator: ';' }))
   .on('data', function (row) {    
     const magazine = {
         title: row.title,
@@ -54,7 +56,7 @@ fs.createReadStream('magazines.csv')
 
 
 router.get('/', function(req, res, next) {
-  res.render('index', {'authors': authors, 'books': books, 'magazines': magazines});
+  res.send({'books': books, 'magazines': magazines});
 });
 
 router.post('/isbn', function(req, res, next){
@@ -67,52 +69,56 @@ router.post('/isbn', function(req, res, next){
   for(var i=0; i<magazines.length; i++){
     if(magazines[i].isbn == isbn) result.push(magazines[i]);
   }
-  res.render('disp', {res: result});
+  res.send({res: result});
 });
 
 router.post('/author', function(req, res, next){
   var author = req.body.author; 
   var result = [];
-
+  
   for(var i=0; i<books.length; i++){
-    for(var j=0; j<books[i].authors.length; j++)
-      if(books[i].authors[j] == author) result.push(books[i]);
+    var arr = books[i].authors.split(',');
+    for(var j=0; j<arr.length; j++)
+      if(arr[j] == author) result.push(books[i]);
   }
   for(var i=0; i<magazines.length; i++){
-    for(var j=0; j<magazines[i].authors.length; j++)
-      if(magazines[i].authors[j] == author) result.push(magazines[i]);
+    var arr = magazines[i].authors.split(',');
+    for(var j=0; j<arr.length; j++)
+      if(arr[j] == author) result.push(magazines[i]);
   }
-  res.render('disp', {res: result});
+  res.send({res: result});
 });
 
 router.post('/book', function(req, res, next){
-  const book = {
-    title: req.body.title,
-    isbn: req.body.isbn,
-    authors: req.body.authors,
-    description: req.body.description
-  };
-  var writer = csvWriter({sendHeaders: false});
-  writer.pipe(fs.createWriteStream('books.csv', {flags: 'a'}));
+  var writer = csvWriter({separator: ';' , sendHeaders: false});
+  writer.pipe(fs.createWriteStream('public/books.csv', {flags: 'a'}));
   writer.write({
-    book
+    title:req.body.title,
+    isbn:req.body.isbn,
+    authors:req.body.authors,
+    description:req.body.description
   });
   writer.end();
+  res.sendStatus(200);
 });
 
 router.post('/magazine', function(req, res, next){
-  const magazine = {
-    title: req.body.title,
-    isbn: req.body.isbn,
-    authors: req.body.authors,
-    publishedAt: req.body.publishedAt
-  };
-  var writer = csvWriter({sendHeaders: false});
-  writer.pipe(fs.createWriteStream('magazines.csv', {flags: 'a'}));
+  var writer = csvWriter({separator: ';' , sendHeaders: false});
+  writer.pipe(fs.createWriteStream('public/magazines.csv', {flags: 'a'}));
   writer.write({
-    magazine
+    title:req.body.title,
+    isbn:req.body.isbn,
+    authors:req.body.authors,
+    publishedAt:req.body.publishedAt
   });
   writer.end();
+  res.sendStatus(200);
+})
+
+router.get('/sorted', function(req, res, next){
+  let result = books.concat(magazines);
+  result.sort((a,b) => (a.title > b.title) ? 1 : ((b.title > a.title) ? -1 : 0));
+  res.send({res: result});
 })
 
 module.exports = router;
